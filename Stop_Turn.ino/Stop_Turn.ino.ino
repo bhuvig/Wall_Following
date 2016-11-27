@@ -3,84 +3,68 @@
 Ultrasonic ultraright(A5,A4);   // (Trig PIN,Echo PIN)
 Ultrasonic ultraleft(5,7);  // (Trig PIN,Echo PIN)
 
-#define wall_dist 10.0
-#define timestep 100
+#define wall_dist 15.0
+#define timestep 10
 
-#define f_range 4 //forward range, the three region partition
+//#define kpd 5
+//#define kid 0
+//#define kdd 0
+
+#define kpa 0.3
+#define kia 0
+#define kda 0
+
+#define dErrormax 
+
+#define f_range 2//forward range, the three region partition
 #define PWM1 10
-#define In1 13
-#define In2 12
+#define In3 13
+#define In4 12
 #define PWM2 11
-#define In3 A1
-#define In4 A0
+#define In1 A1
+#define In2 A0
+
+float error[4]={0,0,0,0};
+float t_error[2]={0,0};
+float Udist1=0,Udist2=0;
 
 float read_ul1()
 {
-  
   return(ultraleft.Ranging(CM));
 }
 float read_ul2()
 {
-  
   return(ultraright.Ranging(CM));
 }
 
 
-void forward()
-{
-  digitalWrite(In1,HIGH);
-  digitalWrite(In3,HIGH);
-  digitalWrite(In2,LOW);
-  digitalWrite(In4,LOW);
-  analogWrite(PWM1,128);
-  analogWrite(PWM2,128);
-  delay(2*timestep);
-}
+//int pid1(float v1,float v2)
+//{
+//  error[0]= error[1];         // error[0] is now the last error[1]
+//  error[1] = v1 - v2;         // new error[1]
+//  
+//  t_error[0] += error[1];     // total error summation for integration part
+//  int correction = kpd*error[1] + kid*t_error[0] + kdd*(error[1] - error[0]);     //correction function
+//  return correction;
+//}
 
-void left()
+int pid2(float v1,float v2, float integral)
 {
-  analogWrite(PWM1,128);
-  analogWrite(PWM2,128);
-  digitalWrite(In1,HIGH);
-  digitalWrite(In3,LOW);
-  digitalWrite(In2,LOW);
-  digitalWrite(In4,LOW);
-  
-  delay(timestep);
-}
-
-void right()
-{
-  digitalWrite(In1,LOW);
-  digitalWrite(In3,HIGH);
-  digitalWrite(In2,LOW);
-  digitalWrite(In4,LOW);
-  analogWrite(PWM1,128);
-  analogWrite(PWM2,128);
-  delay(timestep);
-}
-
-void sharpturn(int sensor1, int sensor2){
-  if(sensor1==1)
+  error[2]= error[3];         // error[0] is now the last error[1]
+  error[3] = v1 - v2;         // new error[1]
+  int m_time = millis();
+  if(m_time%500==0)
   {
-    left();left();left();left();
+    t_error[1] += integral;     // total error summation for integration part
   }
-  else
+  if(t_error[1]>100)
   {
-    right();right();right();right();
+    t_error[1] = 100;
   }
-  
+  int correction_angle = kpa*error[3] + kia*t_error[1] + kda*(error[3] - error[2]);     //correction function
+  return (correction_angle);
 }
 
-void run_v(float dist1,float dist2)
-{
-  if(abs(dist1-dist2)<f_range)
-    forward();
-  else if(dist1-dist2>0)
-    right();
-  else
-    left();    
-}
 
 //SETUP:
 void setup() 
@@ -93,48 +77,45 @@ void setup()
   pinMode(In3,OUTPUT);  //hercules motor driver
   pinMode(In4,OUTPUT);
   pinMode(PWM2,OUTPUT);
-  
+  digitalWrite(In1,HIGH); 
+  digitalWrite(In3,HIGH);
+  digitalWrite(In2,LOW);
+  digitalWrite(In4,LOW);
 }
-float Udist1=0, Udist2=0, pdist1=wall_dist, pdist2=wall_dist;
+float pdist1=wall_dist, pdist2=wall_dist;
 int overshoot=-1; //-1 means false
 //LOOP:
 void loop() 
 {
-  
+
+  float w1=0,w2=25;            //weight 1 and weight 2
+  //error 1oo units
   Udist1=read_ul1();
   Udist2=read_ul2();
-  Serial.print(Udist1);
-  Serial.print('\t');
-  Serial.println(Udist2);
-
   pdist1=Udist1;
   pdist2=Udist2;
-  delay(100);
-//  if(abs(Udist1-pdist1)>5){
-//    if(overshoot==-1){    //this is the first overshoot
-//      overshoot=overshoot*-1;
-//      return;
-//    }
-//    else
-//      overshoot=-1;
-//      sharpturn(1,0);  
-//      return;   
-//  }
-//  else if(abs(Udist2-pdist2)>5){
-//    if(overshoot==-1){    //this is the first overshoot
-//      overshoot=overshoot*-1;
-//      return;
-//    }
-//    else
-//      overshoot=-1;
-//      sharpturn(0,1);
-//      return;
-//  }
-//  
-//
-//  else{
-  run_v(Udist1-wall_dist, Udist2-wall_dist);
-//  }
-  
-  
+  Serial.print(Udist1);
+  Serial.print("\t");
+  Serial.print(Udist2);
+  Serial.print("\t\t\t");
+//  run_v(Udist1-wall_dist, Udist2-wall_dist);
+  int motor1=195 - pid2((w2*(Udist1-Udist2))+(w1*(Udist1+Udist2)/2),w1*wall_dist, (Udist1+Udist2)/2);
+  int motor2=200 + pid2((w2*(Udist1-Udist2))+(w1*(Udist1+Udist2)/2),w1*wall_dist, (Udist1+Udist2)/2);
+  if(motor1>255)
+    motor1=255;
+  if(motor2>255)
+    motor2=255;
+  if(motor1<0)
+    motor1=0;
+  if(motor2<0)
+    motor2=0;
+  analogWrite(PWM1,motor1);
+  analogWrite(PWM2,motor2);
+  Serial.print(motor1);
+  Serial.print("\t");
+  Serial.println(motor2);
+
 }
+  
+  
+
