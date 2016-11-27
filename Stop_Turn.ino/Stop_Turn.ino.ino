@@ -10,9 +10,9 @@ Ultrasonic ultraleft(5,7);  // (Trig PIN,Echo PIN)
 //#define kid 0
 //#define kdd 0
 
-#define kpa 0.3
-#define kia 0
-#define kda 0
+#define kpa 0.9     // nice at 1.0
+#define kia 0.8 //was 0.5
+#define kda 0.1
 
 #define dErrormax 
 
@@ -27,6 +27,7 @@ Ultrasonic ultraleft(5,7);  // (Trig PIN,Echo PIN)
 float error[4]={0,0,0,0};
 float t_error[2]={0,0};
 float Udist1=0,Udist2=0;
+float pid_output = 0;
 
 float read_ul1()
 {
@@ -62,6 +63,7 @@ int pid2(float v1,float v2, float integral)
     t_error[1] = 100;
   }
   int correction_angle = kpa*error[3] + kia*t_error[1] + kda*(error[3] - error[2]);     //correction function
+  
   return (correction_angle);
 }
 
@@ -81,6 +83,27 @@ void setup()
   digitalWrite(In3,HIGH);
   digitalWrite(In2,LOW);
   digitalWrite(In4,LOW);
+
+  //for starting
+  Udist1=read_ul1();
+  Udist2=read_ul2();
+  while(Udist1==51 || Udist2==51)
+  {
+    
+    if(Udist1==51)
+    {
+      analogWrite(PWM1,0); 
+      analogWrite(PWM2,225);
+    }
+    else
+     {
+      analogWrite(PWM1,220); 
+      analogWrite(PWM2,0);
+     }
+    Udist1=read_ul1();
+    Udist2=read_ul2();  
+  }
+  
 }
 float pdist1=wall_dist, pdist2=wall_dist;
 int overshoot=-1; //-1 means false
@@ -88,7 +111,7 @@ int overshoot=-1; //-1 means false
 void loop() 
 {
 
-  float w1=0,w2=25;            //weight 1 and weight 2
+  float w1=4,w2=13;            //2,13
   //error 1oo units
   Udist1=read_ul1();
   Udist2=read_ul2();
@@ -99,8 +122,14 @@ void loop()
   Serial.print(Udist2);
   Serial.print("\t\t\t");
 //  run_v(Udist1-wall_dist, Udist2-wall_dist);
-  int motor1=195 - pid2((w2*(Udist1-Udist2))+(w1*(Udist1+Udist2)/2),w1*wall_dist, (Udist1+Udist2)/2);
-  int motor2=200 + pid2((w2*(Udist1-Udist2))+(w1*(Udist1+Udist2)/2),w1*wall_dist, (Udist1+Udist2)/2);
+  if(Udist1==51 || Udist2==51)
+  {
+    pid_output = (((w2*(Udist1-Udist2))+(w1*(Udist1+Udist2)/2))-w1*wall_dist)*0.4;
+  }
+  else 
+    pid_output = pid2((w2*(Udist1-Udist2))+(w1*(Udist1+Udist2)/2),w1*wall_dist, (Udist1+Udist2)/2);
+  int motor1=195 - pid_output;
+  int motor2=200 + pid_output;
   if(motor1>255)
     motor1=255;
   if(motor2>255)
@@ -118,4 +147,4 @@ void loop()
 }
   
   
-
+//2, 13, 1
